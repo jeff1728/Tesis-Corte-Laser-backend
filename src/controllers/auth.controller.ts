@@ -3,7 +3,7 @@ import { supabase } from '../config/supabase';
 
 // Registro de Usuario
 export const registerUser = async (req: Request, res: Response): Promise<void> => {
-  const { email, password, full_name } = req.body;
+  const { email, password, nombres, apellidos } = req.body;
 
   if (!email || !password) {
     res.status(400).json({ error: 'El email y la contraseña son obligatorios.' });
@@ -16,7 +16,8 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
       password,
       options: {
         data: {
-          full_name: full_name || '',
+          nombres: nombres || '',
+          apellidos: apellidos || ''
         }
       }
     });

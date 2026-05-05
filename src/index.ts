@@ -13,6 +13,7 @@ app.use(cors());
 app.use(express.json());
 
 import authRoutes from './routes/auth.routes';
+import aiRoutes from './routes/ai.routes';
 
 // Rutas básicas de prueba
 app.get('/', (req: Request, res: Response) => {
@@ -21,6 +22,7 @@ app.get('/', (req: Request, res: Response) => {
 
 // Registrar rutas de la API
 app.use('/api/auth', authRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Arrancar servidor
 app.listen(PORT, () => {
