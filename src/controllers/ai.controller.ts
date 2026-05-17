@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 
-export const generateImage = async (req: Request, res: Response): Promise<void> => {
+// Nuevo pipeline: genera SVG + DXF en lugar de imagen rasterizada
+export const generateVector = async (req: Request, res: Response): Promise<void> => {
   try {
     const { prompt } = req.body;
 
@@ -9,10 +10,10 @@ export const generateImage = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    console.log(`[AI Controller] Enviando prompt al servicio python: "${prompt}"`);
+    console.log(`[AI Controller] Enviando prompt al pipeline de agentes: "${prompt}"`);
 
-    // Llamamos al servicio de Python local
-    const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:5000/generate';
+    // Llamamos al microservicio FastAPI en el puerto 8000
+    const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:8000/generate';
     
     const response = await fetch(pythonServiceUrl, {
       method: 'POST',
@@ -30,9 +31,16 @@ export const generateImage = async (req: Request, res: Response): Promise<void> 
     }
 
     const data = await response.json();
-    
-    // Devolvemos la imagen en base64 al frontend
-    res.status(200).json({ image: data.image });
+
+    // El nuevo pipeline devuelve SVG + DXF + reporte de validación
+    res.status(200).json({
+      status: data.status,
+      svg_content: data.svg_content,
+      svg_path: data.svg_path,
+      dxf_path: data.dxf_path,
+      validation_report: data.validation_report,
+      retries_used: data.retries_used,
+    });
   } catch (error) {
     console.error('[AI Controller] Error interno:', error);
     res.status(500).json({ error: 'Error interno del servidor al procesar la solicitud de IA' });

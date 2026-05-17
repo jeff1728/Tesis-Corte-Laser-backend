@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { generateImage } from '../controllers/ai.controller';
+import { generateVector } from '../controllers/ai.controller';
 
 const router = Router();
 
-router.post('/generate-image', generateImage);
+router.post('/generate-vector', generateVector);
 
 export default router;
