@@ -14,6 +14,7 @@ app.use(express.json());
 
 import authRoutes from './routes/auth.routes';
 import aiRoutes from './routes/ai.routes';
+import chatRoutes from './routes/chat.routes';
 
 // Rutas básicas de prueba
 app.get('/', (req: Request, res: Response) => {
@@ -23,6 +24,7 @@ app.get('/', (req: Request, res: Response) => {
 // Registrar rutas de la API
 app.use('/api/auth', authRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/chats', chatRoutes);
 
 // Arrancar servidor
 app.listen(PORT, () => {

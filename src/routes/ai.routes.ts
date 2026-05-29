@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { generateVector } from '../controllers/ai.controller';
+import { generateVector, downloadDxf } from '../controllers/ai.controller';
 
 const router = Router();
 
 router.post('/generate-vector', generateVector);
+router.get('/download-dxf', downloadDxf);
 
 export default router;
