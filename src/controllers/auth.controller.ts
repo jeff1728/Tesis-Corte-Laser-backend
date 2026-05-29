@@ -1,5 +1,19 @@
 import { Request, Response } from 'express';
-import { supabase } from '../config/supabase';
+import { createClient } from '@supabase/supabase-js';
+
+// Inicializamos un cliente puro y sin estado para manejar autenticaciones sin
+// contaminar el singleton global administrativo que usamos para bypass de RLS.
+const authClient = createClient(
+  process.env.SUPABASE_URL || '',
+  process.env.SUPABASE_ANON_KEY || '',
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false
+    }
+  }
+);
 
 // Registro de Usuario
 export const registerUser = async (req: Request, res: Response): Promise<void> => {
@@ -11,7 +25,7 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
   }
 
   try {
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await authClient.auth.signUp({
       email,
       password,
       options: {
@@ -43,7 +57,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await authClient.auth.signInWithPassword({
       email,
       password,
     });
