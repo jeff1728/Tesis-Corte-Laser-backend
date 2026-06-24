@@ -5,7 +5,8 @@ import { storageService } from '../services/storage.service';
 // Nuevo pipeline: genera SVG + DXF en lugar de imagen rasterizada, con soporte de historial
 export const generateVector = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { prompt, canvas_width_mm, canvas_height_mm, usuario_id, conversacion_id } = req.body;
+    const generateStartTime = performance.now();
+    const { prompt, canvas_width_mm, canvas_height_mm, usuario_id, conversacion_id, es_evaluacion } = req.body;
 
     if (!prompt) {
       res.status(400).json({ error: 'El prompt es requerido' });
@@ -16,13 +17,13 @@ export const generateVector = async (req: Request, res: Response): Promise<void>
 
     // Llamamos al microservicio FastAPI en el puerto 8000
     const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:8000/generate';
-    
+
     const response = await fetch(pythonServiceUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         prompt,
         canvas_width_mm: canvas_width_mm || 100,
         canvas_height_mm: canvas_height_mm || 100
@@ -37,6 +38,7 @@ export const generateVector = async (req: Request, res: Response): Promise<void>
     }
 
     const data = await response.json();
+    const tiempo_generacion_segundos = Number(((performance.now() - generateStartTime) / 1000).toFixed(2));
 
     let activeConversationId = conversacion_id || null;
     let svgUrl = '';
@@ -94,6 +96,43 @@ export const generateVector = async (req: Request, res: Response): Promise<void>
 
         if (designError) {
           throw new Error(`Error al registrar diseño: ${designError.message}`);
+        }
+
+        // Guardar en metricas_evaluacion si es una solicitud de evaluacion
+        if (es_evaluacion) {
+          try {
+            const report = data.validation_report || {};
+            const es_valido_svg = report.is_valid ?? null;
+
+            // Calculamos el porcentaje nosotros mismos porque el schema de Python solo da el total y las cerradas
+            let porcentaje_rutas_cerradas = 0;
+            if (report.total_paths && report.total_paths > 0) {
+              porcentaje_rutas_cerradas = Number(((report.closed_paths || 0) / report.total_paths * 100).toFixed(2));
+            }
+
+            // Aseguramos de que siempre caiga en un array para evitar nulos y contar correctamente
+            const errorsArray = Array.isArray(report.errors) ? report.errors : [];
+            const errores_geometricos = errorsArray.length;
+            const tipo_error = errorsArray;
+
+            const { error: metricsError } = await supabase
+              .from('metricas_evaluacion')
+              .insert({
+                registro_id: designData.registro_id,
+                es_valido_svg,
+                reintentos: data.retries_used || 0,
+                tiempo_generacion_segundos,
+                porcentaje_rutas_cerradas,
+                errores_geometricos,
+                tipo_error
+              });
+
+            if (metricsError) {
+              console.error('[AI Controller] Error al guardar métricas de evaluación:', metricsError);
+            }
+          } catch (metricsErr) {
+            console.error('[AI Controller] Error general guardando métricas:', metricsErr);
+          }
         }
 
         // 4. Insertamos las rutas de los archivos en generacion_archivos
