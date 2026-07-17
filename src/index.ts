@@ -5,6 +5,8 @@ import dotenv from 'dotenv';
 // Cargar variables de entorno
 dotenv.config();
 
+import { requireAuth, optionalAuth } from './middlewares/auth.middleware';
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -23,8 +25,8 @@ app.get('/', (req: Request, res: Response) => {
 
 // Registrar rutas de la API
 app.use('/api/auth', authRoutes);
-app.use('/api/ai', aiRoutes);
-app.use('/api/chats', chatRoutes);
+app.use('/api/ai', optionalAuth, aiRoutes);
+app.use('/api/chats', requireAuth, chatRoutes);
 
 // Arrancar servidor
 app.listen(PORT, () => {

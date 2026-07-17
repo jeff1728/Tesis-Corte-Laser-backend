@@ -4,10 +4,10 @@ import { supabase } from '../config/supabase';
 // 1. Obtener lista de conversaciones de un usuario
 export const getConversations = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { usuario_id } = req.query;
+    const usuario_id = (req as any).user?.id;
 
-    if (!usuario_id || typeof usuario_id !== 'string') {
-      res.status(400).json({ error: 'El usuario_id es obligatorio' });
+    if (!usuario_id) {
+      res.status(401).json({ error: 'Falta usuario autenticado' });
       return;
     }
 

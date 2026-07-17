@@ -62,6 +62,5 @@ export class SupabaseStorage implements IStorageService {
   }
 }
 
-export const storageService = process.env.NODE_ENV === 'production'
-  ? new SupabaseStorage()
-  : new LocalDiskStorage();
+// Forzar el uso de Supabase Storage incluso en desarrollo para resolver el error 404
+export const storageService = new SupabaseStorage();

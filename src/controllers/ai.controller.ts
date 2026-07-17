@@ -6,7 +6,8 @@ import { storageService } from '../services/storage.service';
 export const generateVector = async (req: Request, res: Response): Promise<void> => {
   try {
     const generateStartTime = performance.now();
-    const { prompt, canvas_width_mm, canvas_height_mm, usuario_id, conversacion_id, es_evaluacion } = req.body;
+    const { prompt, canvas_width_mm, canvas_height_mm, conversacion_id, es_evaluacion, estilo_salida } = req.body;
+    const usuario_id = (req as any).user?.id;
 
     if (!prompt) {
       res.status(400).json({ error: 'El prompt es requerido' });
@@ -26,7 +27,8 @@ export const generateVector = async (req: Request, res: Response): Promise<void>
       body: JSON.stringify({
         prompt,
         canvas_width_mm: canvas_width_mm || 100,
-        canvas_height_mm: canvas_height_mm || 100
+        canvas_height_mm: canvas_height_mm || 100,
+        estilo_salida: estilo_salida || 'silueta'
       }),
     });
 
@@ -83,7 +85,7 @@ export const generateVector = async (req: Request, res: Response): Promise<void>
             conversacion_id: activeConversationId,
             usuario_id: usuario_id,
             prompt,
-            salida_estilo: 'monoline',
+            salida_estilo: estilo_salida || 'silueta',
             nivel_detalle: 3,
             linea_grosor: 0.5,
             trazo_cerrado: true,
@@ -166,6 +168,28 @@ export const generateVector = async (req: Request, res: Response): Promise<void>
           }
         }
 
+        // 4.5 Insertar las métricas de consumo de tokens/imágenes en consumo_api
+        if (data.usage_metrics && Array.isArray(data.usage_metrics) && data.usage_metrics.length > 0) {
+          const metricsToInsert = data.usage_metrics.map((metric: any) => ({
+            usuario_id: usuario_id,
+            registro_id: designData.registro_id,
+            modelo: metric.modelo,
+            tipo_operacion: metric.tipo_operacion,
+            tokens_totales: metric.tokens_totales || 0,
+            imagenes_generadas: metric.imagenes_generadas || 0,
+            costo_usd: metric.costo_usd || 0.0,
+            fecha_creacion: new Date().toISOString()
+          }));
+
+          const { error: usageError } = await supabase
+            .from('consumo_api')
+            .insert(metricsToInsert);
+
+          if (usageError) {
+            console.error('[AI Controller] Error al guardar métricas de consumo:', usageError);
+          }
+        }
+
         // 5. Actualizamos fecha_actualizacion de la conversación para ordenarla primero
         await supabase
           .from('conversaciones')
@@ -205,9 +229,12 @@ export const downloadDxf = async (req: Request, res: Response): Promise<void> =>
 
     console.log(`[AI Controller] Solicitando descarga de DXF para: ${filepath}`);
 
-    const pythonServiceUrlBase = process.env.PYTHON_SERVICE_URL_BASE || 'http://127.0.0.1:8000';
-    const relativePath = filepath.replace(/^\.\//, '');
-    const fileUrl = `${pythonServiceUrlBase}/${relativePath}`;
+    let fileUrl = filepath;
+    if (!filepath.startsWith('http://') && !filepath.startsWith('https://')) {
+      const pythonServiceUrlBase = process.env.PYTHON_SERVICE_URL_BASE || 'http://127.0.0.1:8000';
+      const relativePath = filepath.replace(/^\.\//, '');
+      fileUrl = `${pythonServiceUrlBase}/${relativePath}`;
+    }
 
     console.log(`[AI Controller] Descargando DXF desde: ${fileUrl}`);
 
@@ -227,5 +254,32 @@ export const downloadDxf = async (req: Request, res: Response): Promise<void> =>
   } catch (error) {
     console.error('[AI Controller] Error en descarga de DXF:', error);
     res.status(500).json({ error: 'Error al procesar la descarga del archivo DXF' });
+  }
+};
+
+export const getUserMetrics = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const usuario_id = (req as any).user?.id;
+    if (!usuario_id) {
+      res.status(401).json({ error: 'Falta usuario autenticado' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('consumo_api')
+      .select('*')
+      .eq('usuario_id', usuario_id)
+      .order('fecha_creacion', { ascending: false });
+
+    if (error) {
+      console.error('[AI Controller] Error al obtener métricas:', error);
+      res.status(500).json({ error: 'Error al consultar métricas' });
+      return;
+    }
+
+    res.status(200).json({ data });
+  } catch (error) {
+    console.error('[AI Controller] Error interno obteniendo métricas:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
 };
