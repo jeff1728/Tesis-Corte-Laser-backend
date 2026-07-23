@@ -6,7 +6,17 @@ import { storageService } from '../services/storage.service';
 export const generateVector = async (req: Request, res: Response): Promise<void> => {
   try {
     const generateStartTime = performance.now();
-    const { prompt, canvas_width_mm, canvas_height_mm, conversacion_id, es_evaluacion, estilo_salida } = req.body;
+    const {
+      prompt,
+      canvas_width_mm,
+      canvas_height_mm,
+      conversacion_id,
+      es_evaluacion,
+      estilo_salida,
+      nivel_detalle,
+      linea_grosor,
+      trazo_cerrado
+    } = req.body;
     const usuario_id = (req as any).user?.id;
 
     if (!prompt) {
@@ -28,7 +38,10 @@ export const generateVector = async (req: Request, res: Response): Promise<void>
         prompt,
         canvas_width_mm: canvas_width_mm || 100,
         canvas_height_mm: canvas_height_mm || 100,
-        estilo_salida: estilo_salida || 'silueta'
+        estilo_salida: estilo_salida || 'silueta',
+        nivel_detalle: nivel_detalle || 'Medio',
+        linea_grosor: linea_grosor !== undefined ? linea_grosor : 5.0,
+        trazo_cerrado: trazo_cerrado !== undefined ? trazo_cerrado : true
       }),
     });
 
@@ -78,6 +91,11 @@ export const generateVector = async (req: Request, res: Response): Promise<void>
           dxfUrl = await storageService.uploadFromUrl(data.dxf_path);
         }
 
+        // Mapear nivel de detalle de texto a número para la DB
+        let nivelDb = 2;
+        if (nivel_detalle === 'Bajo') nivelDb = 1;
+        if (nivel_detalle === 'Alto') nivelDb = 3;
+
         // 3. Insertamos el diseño en registros_disenos
         const { data: designData, error: designError } = await supabase
           .from('registros_disenos')
@@ -86,9 +104,9 @@ export const generateVector = async (req: Request, res: Response): Promise<void>
             usuario_id: usuario_id,
             prompt,
             salida_estilo: estilo_salida || 'silueta',
-            nivel_detalle: 3,
-            linea_grosor: 0.5,
-            trazo_cerrado: true,
+            nivel_detalle: nivelDb,
+            linea_grosor: linea_grosor !== undefined ? linea_grosor : 5.0,
+            trazo_cerrado: trazo_cerrado !== undefined ? trazo_cerrado : true,
             canva_tamano: `${canvas_width_mm || 100}x${canvas_height_mm || 100}`,
             estado: 'success',
             fecha_creacion: new Date().toISOString()
