@@ -11,13 +11,17 @@ export const getConversations = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    console.log(`[Chat Controller] Obteniendo conversaciones para el usuario: ${usuario_id}`);
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    console.log(`[Chat Controller] Obteniendo conversaciones para el usuario: ${usuario_id} (limit: ${limit}, offset: ${offset})`);
 
     const { data, error } = await supabase
       .from('conversaciones')
       .select('*')
       .eq('usuario_id', usuario_id)
-      .order('fecha_actualizacion', { ascending: false });
+      .order('fecha_actualizacion', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) {
       console.error('[Chat Controller] Error Supabase:', error);

@@ -117,44 +117,50 @@ export const generateVector = async (req: Request, res: Response): Promise<void>
         if (designError) {
           throw new Error(`Error al registrar diseño: ${designError.message}`);
         }
+        // Guardar SIEMPRE en metricas_evaluacion para la telemetría de la tesis
+        try {
+          const report = data.validation_report || {};
+          const es_valido_svg = report.is_valid ?? null;
 
-        // Guardar en metricas_evaluacion si es una solicitud de evaluacion
-        if (es_evaluacion) {
-          try {
-            const report = data.validation_report || {};
-            const es_valido_svg = report.is_valid ?? null;
-
-            // Calculamos el porcentaje nosotros mismos porque el schema de Python solo da el total y las cerradas
-            let porcentaje_rutas_cerradas = 0;
-            if (report.total_paths && report.total_paths > 0) {
-              porcentaje_rutas_cerradas = Number(((report.closed_paths || 0) / report.total_paths * 100).toFixed(2));
-            }
-
-            // Aseguramos de que siempre caiga en un array para evitar nulos y contar correctamente
-            const errorsArray = Array.isArray(report.errors) ? report.errors : [];
-            const errores_geometricos = errorsArray.length;
-            const tipo_error = errorsArray;
-
-            const { error: metricsError } = await supabase
-              .from('metricas_evaluacion')
-              .insert({
-                registro_id: designData.registro_id,
-                es_valido_svg,
-                reintentos: data.retries_used || 0,
-                tiempo_generacion_segundos,
-                porcentaje_rutas_cerradas,
-                errores_geometricos,
-                tipo_error
-              });
-
-            if (metricsError) {
-              console.error('[AI Controller] Error al guardar métricas de evaluación:', metricsError);
-            }
-          } catch (metricsErr) {
-            console.error('[AI Controller] Error general guardando métricas:', metricsErr);
+          // Calculamos el porcentaje nosotros mismos porque el schema de Python solo da el total y las cerradas
+          let porcentaje_rutas_cerradas = 0;
+          if (report.total_paths && report.total_paths > 0) {
+            porcentaje_rutas_cerradas = Number(((report.closed_paths || 0) / report.total_paths * 100).toFixed(2));
           }
-        }
 
+          // Aseguramos de que siempre caiga en un array para evitar nulos y contar correctamente
+          const errorsArray = Array.isArray(report.errors) ? report.errors : [];
+          const errores_geometricos = errorsArray.length;
+          const tipo_error = errorsArray;
+
+          const { error: metricsError } = await supabase
+            .from('metricas_evaluacion')
+            .insert({
+              registro_id: designData.registro_id,
+              prompt_usuario: prompt,
+              es_valido_svg,
+              reintentos: data.retries_used || 0,
+              tiempo_generacion_segundos,
+              porcentaje_rutas_cerradas,
+              total_paths: report.total_paths || 0,
+              trazos_cerrados: report.closed_paths || 0,
+              trazos_abiertos: report.open_paths || 0,
+              curvas_bezier: report.bezier_curves_flattened || 0,
+              errores_geometricos,
+              tipo_error,
+              modo_generacion: data.generation_mode || null,
+              agujeros_interiores: report.agujeros_interiores || 0,
+              buffer_aplicado: report.buffer_aplicado || false,
+              piezas_sueltas: report.piezas_sueltas || 1,
+              dimension_real_mm: report.dimension_real_mm || ""
+            });
+
+          if (metricsError) {
+            console.error('[AI Controller] Error al guardar métricas de evaluación:', metricsError);
+          }
+        } catch (metricsErr) {
+          console.error('[AI Controller] Error general guardando métricas:', metricsErr);
+        }
         // 4. Insertamos las rutas de los archivos en generacion_archivos
         const filesToInsert = [];
         if (svgUrl) {
@@ -223,6 +229,7 @@ export const generateVector = async (req: Request, res: Response): Promise<void>
     // Retornamos SVG, DXF y detalles
     res.status(200).json({
       status: data.status,
+      generation_mode: data.generation_mode,
       svg_content: data.svg_content,
       svg_path: svgUrl || data.svg_path,
       dxf_path: dxfUrl || data.dxf_path,

@@ -117,7 +117,8 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
     return;
   }
   const token = authHeader.split(' ')[1];
-  const { nombres, apellidos, avatar_url } = req.body;
+  const { nombres, apellidos } = req.body;
+  let { avatar_url } = req.body;
 
   try {
     // 1. Obtener el usuario autenticado a partir del token (stateless)
@@ -126,6 +127,34 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
     if (authError || !user) {
       res.status(401).json({ error: 'Token inválido o sesión expirada.' });
       return;
+    }
+
+    // Procesar Base64 avatar_url si está presente
+    if (avatar_url && avatar_url.startsWith('data:image')) {
+      const matches = avatar_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        const mimeType = matches[1];
+        const base64Data = matches[2];
+        const buffer = Buffer.from(base64Data, 'base64');
+        const extension = mimeType.split('/')[1] || 'png';
+        const fileName = `${user.id}_${Date.now()}.${extension}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(fileName, buffer, {
+            contentType: mimeType,
+            upsert: true
+          });
+
+        if (uploadError) {
+          console.error("[Auth Controller] Error al subir avatar:", uploadError);
+          res.status(400).json({ error: 'Error al subir la imagen.' });
+          return;
+        }
+
+        const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+        avatar_url = publicUrlData.publicUrl;
+      }
     }
 
     // 2. Usar la API de admin para actualizar la metainformación del usuario
@@ -159,5 +188,57 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
     res.status(200).json({ message: 'Perfil actualizado exitosamente', data: data.user });
   } catch (err) {
     res.status(500).json({ error: 'Error interno al actualizar perfil.' });
+  }
+};
+
+// Actualizar Contraseña
+export const updatePassword = async (req: Request, res: Response): Promise<void> => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Token no proporcionado.' });
+    return;
+  }
+  const token = authHeader.split(' ')[1];
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: 'Contraseña actual y nueva son requeridas.' });
+    return;
+  }
+
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user || !user.email) {
+      res.status(401).json({ error: 'Token inválido o sesión expirada.' });
+      return;
+    }
+
+    // Verificar contraseña actual usando el authClient para simular un login
+    const { error: signInError } = await authClient.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword,
+    });
+
+    if (signInError) {
+      res.status(401).json({ error: 'La contraseña actual es incorrecta.' });
+      return;
+    }
+
+    // Actualizar con la nueva contraseña usando la API de admin
+    const { error: updateError } = await supabase.auth.admin.updateUserById(
+      user.id,
+      { password: newPassword }
+    );
+
+    if (updateError) {
+      res.status(400).json({ error: updateError.message });
+      return;
+    }
+
+    res.status(200).json({ message: 'Contraseña actualizada exitosamente' });
+  } catch (err) {
+    console.error("[Auth Controller] Error al actualizar contraseña:", err);
+    res.status(500).json({ error: 'Error interno al actualizar contraseña.' });
   }
 };
